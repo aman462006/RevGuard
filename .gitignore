@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment / secrets
+.env
+
+# Local databases + backups (never commit data or secrets)
+*.db
+*.sqlite
+*.sqlite3
+*.bak
+*.bak_*
+*.db.bak*
+
+# Screenshots / scratch images (not part of the app)
+image.png
+*.local.png
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
