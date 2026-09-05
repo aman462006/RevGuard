@@ -52,6 +52,7 @@ razorpay = [
 api = [
     "fastapi>=0.110,<1",
     "httpx>=0.27,<1",
+    "uvicorn[standard]>=0.30,<1",
 ]
 
 [project.scripts]

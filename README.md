@@ -111,22 +111,24 @@ See [`docs/`](docs/) for the full specifications.
 
 ## 6. Deployment
 
-> Fill in the links below after deploying.
+> Fill in the links below after deploying (see the step-by-step runbook in
+> [`DEPLOYMENT.md`](DEPLOYMENT.md)).
 
-| Component | Platform | URL |
-|-----------|----------|-----|
-| Frontend (dashboard) | e.g. Vercel / Netlify | `<ADD_DEPLOYED_FRONTEND_URL>` |
-| Backend (API) | e.g. Render / Railway | `<ADD_DEPLOYED_BACKEND_URL>` |
+| Component | Platform | Config | URL |
+|-----------|----------|--------|-----|
+| Frontend (dashboard) | **Vercel** | Root dir `frontend`, `VITE_API_BASE_URL` → backend URL | `<ADD_DEPLOYED_FRONTEND_URL>` |
+| Backend (API) | **Render** (`render.yaml` blueprint) | `REVGUARD_MODE`, `REVGUARD_CORS_ALLOW_ORIGINS`, keys | `<ADD_DEPLOYED_BACKEND_URL>` |
 
-Deployment notes:
+Notes:
 
-- The frontend reads the API base URL from `VITE_API_BASE_URL` (defaults to
-  `http://localhost:8000`). Set it to the deployed backend URL at build time.
-- Add the deployed frontend origin to the backend's `REVGUARD_CORS_ALLOW_ORIGINS`.
-- Choose the mode per deployment via `REVGUARD_MODE` (`demo` or `production`) — it cannot be
-  switched from the UI, which keeps the mode honest. For a reviewer walkthrough, a **demo**
-  deployment needs no credentials; a **production** deployment needs the AI + Razorpay Test Mode
-  keys below.
+- **Supabase is not an app host** for the FastAPI backend — it's a database. Use Render (or
+  Railway / Fly.io) for the Python service; optionally use a managed Postgres for persistence via
+  `REVGUARD_DATABASE_URL`.
+- The frontend reads `VITE_API_BASE_URL` at build time; add the deployed frontend origin to the
+  backend's `REVGUARD_CORS_ALLOW_ORIGINS`.
+- `REVGUARD_MODE` (`demo` / `production`) is chosen per deployment and cannot be switched from the
+  UI, which keeps the mode honest. Demo needs no credentials; production needs the AI + Razorpay
+  Test Mode keys (set in the host dashboard, never in the repo).
 
 ## 7. Project Structure
 

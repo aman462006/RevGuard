@@ -29,6 +29,10 @@ env/
 image.png
 *.local.png
 
+# Local exploration / recording scratch (not part of the app)
+demo-recorder/
+frontend/frontend/
+
 # OS / editor
 .DS_Store
 Thumbs.db

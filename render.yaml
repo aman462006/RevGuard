@@ -1,0 +1,41 @@
+# Render Blueprint — deploys the RevGuard FastAPI backend.
+#
+# Deploy: Render Dashboard → New → Blueprint → connect the aman462006/RevGuard repo →
+# Apply. Then set the `sync: false` env vars in the dashboard (the CORS origin, and the API
+# keys if you switch to production mode). See DEPLOYMENT.md for the full runbook.
+
+services:
+  - type: web
+    name: revguard-api
+    runtime: python
+    plan: free
+    buildCommand: pip install --upgrade pip && pip install ".[api,gemini,razorpay]"
+    startCommand: uvicorn revguard.api.app:create_api_app --factory --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      # Pin Python (the project requires >=3.12,<3.14).
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      # DEMO = zero credentials, always works (recommended for a reliable judge demo).
+      # Change to "production" and add the keys below for the live Gemini + Razorpay path.
+      - key: REVGUARD_MODE
+        value: demo
+      # SQLite on the instance disk (ephemeral on free — resets on redeploy; fine for a demo).
+      # For persistence, point this at a managed Postgres URL instead.
+      - key: REVGUARD_DATABASE_URL
+        value: "sqlite:///./revguard.db"
+      # After deploying the frontend, set this to your Vercel origin as a JSON list, e.g.
+      #   ["https://revguard.vercel.app"]
+      - key: REVGUARD_CORS_ALLOW_ORIGINS
+        sync: false
+      # --- Only needed when REVGUARD_MODE=production (leave unset in demo) ---
+      - key: REVGUARD_AI_PROVIDER
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
