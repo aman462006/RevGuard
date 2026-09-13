@@ -31,9 +31,12 @@ services:
       # --- Required when REVGUARD_MODE=production ---
       - key: REVGUARD_AI_PROVIDER
         value: groq
-      # Must be a valid Groq model id. This is the production default (Llama 3.3 via Groq).
+      # Must be a *currently available* Groq model that supports json_object response format
+      # (RevGuard's GroqProvider requires it). llama-3.3-70b-versatile was decommissioned by
+      # Groq; qwen3.8-27b is available and returns clean JSON. Check https://console.groq.com
+      # /docs/models if this ever 404s again.
       - key: REVGUARD_AI_MODEL
-        value: llama-3.3-70b-versatile
+        value: qwen/qwen3.8-27b
       # Groq credential — paste the value in the Render dashboard, never commit it here.
       - key: GROQ_API_KEY
         sync: false

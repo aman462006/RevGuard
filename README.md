@@ -8,7 +8,7 @@ audit trail.
 
 > Built for **Razorpay Track 03 — AI Revenue Recovery**.
 
-**Live demo:** `<ADD_DEPLOYED_FRONTEND_URL>`  ·  **API:** `<ADD_DEPLOYED_BACKEND_URL>`
+**Live demo:** https://revguard-plum.vercel.app  ·  **API:** https://revguard-api-pqzt.onrender.com
 
 ---
 
