@@ -36,7 +36,7 @@ const PHASE_ORDER: RunPhase[] = [
 
 export function RunAgent({ status, onChanged, onSelect }: Props) {
   const canRun = status == null ? true : status.demo || status.run_ready;
-  const { phase, busyKey, error, run } = useAgentRunner(canRun);
+  const { phase, busyKey, error, run } = useAgentRunner(canRun, status);
   const [journey, setJourney] = useState<JourneyStep[] | null>(null);
   const [resultCaseId, setResultCaseId] = useState<string | null>(null);
   const [resultStatus, setResultStatus] = useState<string | null>(null);

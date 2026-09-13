@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api, ApiError } from "../api";
 import { SCENARIOS, type Scenario } from "../scenarios";
-import { NOT_CONFIGURED_MESSAGE, pickPrimary } from "../useAgentRunner";
+import { notConfiguredMessage, pickPrimary } from "../useAgentRunner";
 import type { CaseSummary, StatusInfo } from "../types";
 
 interface Props {
@@ -66,7 +66,7 @@ export function DemoControls({ onCreated, onDone, status }: Props) {
       onDone?.();
     } catch (e) {
       if (e instanceof ApiError && e.status === 503) {
-        setError(NOT_CONFIGURED_MESSAGE);
+        setError(notConfiguredMessage(status));
       } else {
         setError(e instanceof Error ? e.message : "Failed to run scenario.");
       }

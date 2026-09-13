@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pickPrimary } from "./useAgentRunner";
+import { notConfiguredMessage, pickPrimary } from "./useAgentRunner";
 import { SCENARIOS } from "./scenarios";
 import type { CaseSummary } from "./types";
 
@@ -44,5 +44,34 @@ describe("pickPrimary", () => {
 
   it("returns null when nothing was raised", () => {
     expect(pickPrimary([], overdueScenario)).toBeNull();
+  });
+});
+
+describe("notConfiguredMessage", () => {
+  it("names the missing Razorpay dependency when Gemini is ready", () => {
+    expect(
+      notConfiguredMessage({
+        mode: "production",
+        demo: false,
+        ai_provider: "gemini",
+        ai_configured: true,
+        razorpay_configured: false,
+        razorpay_test_mode: false,
+        webhook_configured: false,
+        run_ready: false,
+      }),
+    ).toContain("Razorpay Test Mode key/secret");
+    expect(
+      notConfiguredMessage({
+        mode: "production",
+        demo: false,
+        ai_provider: "gemini",
+        ai_configured: true,
+        razorpay_configured: false,
+        razorpay_test_mode: false,
+        webhook_configured: false,
+        run_ready: false,
+      }),
+    ).not.toContain("Groq");
   });
 });

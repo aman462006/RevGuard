@@ -22,7 +22,8 @@ A thin React + TypeScript (Vite) dashboard over the existing RevGuard FastAPI ba
 ```bash
 # 1. Start the backend (from the repo root), e.g.:
 #    py -m uvicorn revguard.api.app:create_api_app --factory --reload
-#    (set ANTHROPIC_API_KEY + Razorpay Test Mode creds to enable POST /cases/{id}/run)
+#    (set REVGUARD_AI_PROVIDER=gemini, GEMINI_API_KEY + Razorpay Test Mode creds to enable
+#    POST /cases/{id}/run)
 
 # 2. Start the dashboard
 cd frontend

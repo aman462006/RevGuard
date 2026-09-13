@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { api, ApiError } from "./api";
 import type { Scenario } from "./scenarios";
-import type { CaseStatus, CaseSummary } from "./types";
+import type { CaseStatus, CaseSummary, StatusInfo } from "./types";
 
 export interface RunOutcome {
   caseIds: string[];
@@ -22,9 +22,27 @@ export type RunPhase =
   | "done"
   | "error";
 
-export const NOT_CONFIGURED_MESSAGE =
-  "Live recovery is not configured (HTTP 503). Set the Groq API key + Razorpay Test Mode " +
-  "credentials on the backend, or run it with REVGUARD_MODE=demo for an offline rehearsal.";
+export function notConfiguredMessage(status: StatusInfo | null): string {
+  if (!status) {
+    return (
+      "Live recovery is not configured (HTTP 503). Check the backend's active AI provider " +
+      "and Razorpay Test Mode credentials, or run it with REVGUARD_MODE=demo for an offline rehearsal."
+    );
+  }
+
+  const missing: string[] = [];
+  if (!status.ai_configured) missing.push(`${status.ai_provider} API key`);
+  if (!status.razorpay_configured) missing.push("Razorpay Test Mode key/secret");
+  else if (!status.razorpay_test_mode) missing.push("Razorpay Test Mode key");
+
+  const reason = missing.length > 0 ? ` Missing: ${missing.join("; ")}.` : "";
+  return (
+    `Live recovery is not configured (HTTP 503).${reason} ` +
+    "Run it with REVGUARD_MODE=demo for an offline rehearsal."
+  );
+}
+
+export const NOT_CONFIGURED_MESSAGE = notConfiguredMessage(null);
 
 // Posting an event makes the backend detector re-scan *all* accumulated events, so the response
 // can include stale open cases from earlier runs alongside the one this scenario just raised.
@@ -41,7 +59,7 @@ export function pickPrimary(cases: CaseSummary[], scenario: Scenario): CaseSumma
   );
 }
 
-export function useAgentRunner(canRun: boolean) {
+export function useAgentRunner(canRun: boolean, status: StatusInfo | null = null) {
   const [phase, setPhase] = useState<RunPhase>("idle");
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +134,7 @@ export function useAgentRunner(canRun: boolean) {
         return res;
       } catch (e) {
         setPhase("error");
-        if (e instanceof ApiError && e.status === 503) setError(NOT_CONFIGURED_MESSAGE);
+        if (e instanceof ApiError && e.status === 503) setError(notConfiguredMessage(status));
         else setError(e instanceof Error ? e.message : "Failed to run the recovery agent.");
         return null;
       } finally {

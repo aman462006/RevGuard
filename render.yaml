@@ -16,10 +16,10 @@ services:
       # Pin Python (the project requires >=3.12,<3.14).
       - key: PYTHON_VERSION
         value: "3.12.7"
-      # DEMO = zero credentials, always works (recommended for a reliable judge demo).
-      # Change to "production" and add the keys below for the live Gemini + Razorpay path.
+      # Production uses Gemini for diagnosis and Razorpay Test Mode for bounded execution.
+      # Set this to "demo" only for a credential-free rehearsal.
       - key: REVGUARD_MODE
-        value: demo
+        value: production
       # SQLite on the instance disk (ephemeral on free — resets on redeploy; fine for a demo).
       # For persistence, point this at a managed Postgres URL instead.
       - key: REVGUARD_DATABASE_URL
@@ -28,7 +28,7 @@ services:
       #   ["https://revguard.vercel.app"]
       - key: REVGUARD_CORS_ALLOW_ORIGINS
         sync: false
-      # --- Only needed when REVGUARD_MODE=production (leave unset in demo) ---
+      # --- Required when REVGUARD_MODE=production ---
       - key: REVGUARD_AI_PROVIDER
         value: gemini
       - key: GEMINI_API_KEY

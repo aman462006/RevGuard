@@ -11,7 +11,7 @@ import { RootCause } from "./RootCause";
 import { DecisionBadge, RiskBadge, StatusBadge } from "./Badges";
 import { ProvenancePanel, ProvenanceTag } from "./Provenance";
 import { ErrorBox, Loading } from "./states";
-import { NOT_CONFIGURED_MESSAGE } from "../useAgentRunner";
+import { notConfiguredMessage } from "../useAgentRunner";
 
 interface Props {
   caseId: string;
@@ -84,7 +84,7 @@ export function CaseDetailPanel({ caseId, status, onClose, onChanged }: Props) {
       onChanged();
     } catch (e) {
       if (e instanceof ApiError && e.status === 503) {
-        setRunError(NOT_CONFIGURED_MESSAGE);
+        setRunError(notConfiguredMessage(status ?? null));
       } else {
         setRunError(e instanceof Error ? e.message : "Run failed.");
       }
@@ -113,7 +113,7 @@ export function CaseDetailPanel({ caseId, status, onClose, onChanged }: Props) {
                 : `Case is now ${titleCase(s)}.`,
         );
       } catch (e) {
-        if (e instanceof ApiError && e.status === 503) setRunError(NOT_CONFIGURED_MESSAGE);
+        if (e instanceof ApiError && e.status === 503) setRunError(notConfiguredMessage(status ?? null));
         else setRunError(e instanceof Error ? e.message : "Authorization failed.");
       } finally {
         setAuthorizing(null);
