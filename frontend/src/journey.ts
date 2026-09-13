@@ -35,7 +35,7 @@ export interface JourneyStep {
 export function providerLabel(provider: string | null | undefined): string {
   if (!provider) return "AI";
   const p = provider.trim().toLowerCase();
-  if (p === "groq") return "Llama 3.3 (Groq)";
+  if (p === "groq") return "Qwen3-27B (Groq)";
   if (p === "gemini") return "Gemini";
   if (p === "anthropic") return "Claude";
   if (p === "mock") return "Mock (offline)";
