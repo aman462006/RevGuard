@@ -9,15 +9,15 @@ services:
     name: revguard-api
     runtime: python
     plan: free
-    buildCommand: pip install --upgrade pip && pip install ".[api,gemini,razorpay]"
+    buildCommand: pip install --upgrade pip && pip install ".[api,groq,razorpay]"
     startCommand: uvicorn revguard.api.app:create_api_app --factory --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       # Pin Python (the project requires >=3.12,<3.14).
       - key: PYTHON_VERSION
         value: "3.12.7"
-      # Production uses Gemini for diagnosis and Razorpay Test Mode for bounded execution.
-      # Set this to "demo" only for a credential-free rehearsal.
+      # Production uses Groq (Llama 3.3) for diagnosis and Razorpay Test Mode for bounded
+      # execution. Set this to "demo" only for a credential-free rehearsal.
       - key: REVGUARD_MODE
         value: production
       # SQLite on the instance disk (ephemeral on free — resets on redeploy; fine for a demo).
@@ -30,13 +30,12 @@ services:
         sync: false
       # --- Required when REVGUARD_MODE=production ---
       - key: REVGUARD_AI_PROVIDER
-        value: gemini
-      # Must be a valid Gemini model. Without this the code default
-      # (llama-3.3-70b-versatile, a Groq model) is sent to Gemini, which rejects it and
-      # every case fail-closes to escalation ("AI provider is temporarily unavailable").
+        value: groq
+      # Must be a valid Groq model id. This is the production default (Llama 3.3 via Groq).
       - key: REVGUARD_AI_MODEL
-        value: gemini-2.0-flash
-      - key: GEMINI_API_KEY
+        value: llama-3.3-70b-versatile
+      # Groq credential — paste the value in the Render dashboard, never commit it here.
+      - key: GROQ_API_KEY
         sync: false
       - key: RAZORPAY_KEY_ID
         sync: false
