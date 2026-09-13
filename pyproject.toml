@@ -43,9 +43,11 @@ groq = [
 # fully offline on MockAdapter without this installed. ``setuptools`` is pinned in because the
 # razorpay 1.4.x SDK imports ``pkg_resources`` at import time, which is no longer bundled with
 # Python 3.12+ virtualenvs — without it the client factory fails with a misleading error.
+# It must stay <81: setuptools 81 removed ``pkg_resources`` entirely, so razorpay 1.4.x fails
+# to import and the integrated path returns HTTP 503 (see DEPLOYMENT.md).
 razorpay = [
     "razorpay>=1.4,<2",
-    "setuptools>=68",
+    "setuptools>=68,<81",
 ]
 # Optional: enables the FastAPI webhook endpoint. Imported lazily; the core engine and its
 # tests never require it.
