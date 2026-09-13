@@ -31,6 +31,11 @@ services:
       # --- Required when REVGUARD_MODE=production ---
       - key: REVGUARD_AI_PROVIDER
         value: gemini
+      # Must be a valid Gemini model. Without this the code default
+      # (llama-3.3-70b-versatile, a Groq model) is sent to Gemini, which rejects it and
+      # every case fail-closes to escalation ("AI provider is temporarily unavailable").
+      - key: REVGUARD_AI_MODEL
+        value: gemini-2.0-flash
       - key: GEMINI_API_KEY
         sync: false
       - key: RAZORPAY_KEY_ID
