@@ -3,6 +3,12 @@
 This module mirrors the fail-closed design of the Anthropic provider while using the
 official ``google-genai`` SDK. Any malformed/absent model output or provider error
 returns a safe escalation recommendation instead of an executable action.
+
+Every diagnosis is recorded through afrec (Agent Flight Recorder) when it is
+installed — a run per case, an LLM span with the real token usage, and a
+final outcome span. Observability is deliberately optional and fail-open in
+exactly one direction: recording must never change what this provider
+returns, and a missing afrec install degrades to a no-op recorder.
 """
 
 from __future__ import annotations
@@ -19,6 +25,46 @@ from revguard.diagnosis.prompts import ALLOWED_ACTION_VALUES, build_user_prompt
 from revguard.domain import ActionProposal, RecoveryCase
 
 logger = logging.getLogger(__name__)
+
+
+class _NoopSpan:
+    """Context-manager stand-in; swallows result() without doing anything."""
+
+    def __enter__(self) -> _NoopSpan:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+    def result(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401 — no-op by design
+        """Discard; recording is disabled (afrec not installed)."""
+
+
+class _NoopRun:
+    """Mirrors the slice of afrec's Run API this module touches."""
+
+    def __enter__(self) -> _NoopRun:
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return False
+
+    def span(self, label: str, **data: Any) -> _NoopSpan:
+        return _NoopSpan()
+
+    def llm_call(self, model: str, messages: Any) -> _NoopSpan:
+        return _NoopSpan()
+
+    def tool_call(self, name: str, arguments: Any) -> _NoopSpan:
+        return _NoopSpan()
+
+
+class _NullRecorder:
+    """Fallback when afrec is not installed: the provider runs unrecorded."""
+
+    def run(self, task: str, tags: Any = None) -> _NoopRun:
+        return _NoopRun()
+
 
 # Gemini-specific system instruction. Unlike Anthropic (which we drive with a schema-constrained
 # *tool*), the google-genai path uses native JSON output (``response_mime_type=application/json``)
@@ -57,6 +103,7 @@ class GeminiProvider(Diagnoser):
         max_tokens: int = 1024,
         timeout_s: float = 30.0,
         client: Any | None = None,
+        recorder: Any | None = None,
     ) -> None:
         self._model = model
         self._api_key = api_key
@@ -64,6 +111,21 @@ class GeminiProvider(Diagnoser):
         self._max_tokens = max_tokens
         self._timeout_s = timeout_s
         self._client = client
+        self._recorder = recorder
+
+    def _get_recorder(self) -> Any:
+        """Explicit recorder wins (tests); else afrec's process default; else no-op.
+
+        Never raises: observability is optional for this module by design.
+        """
+        if self._recorder is not None:
+            return self._recorder
+        try:
+            from afrec import get_recorder
+
+            return get_recorder()
+        except Exception:  # afrec not installed — run unrecorded
+            return _NullRecorder()
 
     def _get_client(self) -> Any:
         if self._client is None:
@@ -75,15 +137,45 @@ class GeminiProvider(Diagnoser):
         return self._client
 
     def diagnose(self, case: RecoveryCase) -> ActionProposal:
+        # One recorded flight per diagnosis. afrec's spans never raise, and a
+        # missing install degrades to the no-op recorder — diagnosis semantics
+        # are identical either way.
+        rec = self._get_recorder()
+        with rec.run(
+            f"Diagnose recovery case {case.case_id}",
+            tags={"agent": "revguard", "provider": self.name, "model": self._model},
+        ) as run:
+            return self._diagnose(case, run)
+
+    def _diagnose(self, case: RecoveryCase, run: Any) -> ActionProposal:
         try:
             client = self._get_client()
-            response = client.models.generate_content(
-                model=self._model,
-                contents=build_user_prompt(case),
-                config=_generate_config(
-                    self._temperature, self._max_tokens, GEMINI_SYSTEM_PROMPT
-                ),
-            )
+            prompt = build_user_prompt(case)
+            with run.llm_call(
+                self._model,
+                messages=[
+                    {"role": "system", "content": GEMINI_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+            ) as span:
+                response = client.models.generate_content(
+                    model=self._model,
+                    contents=prompt,
+                    config=_generate_config(
+                        self._temperature, self._max_tokens, GEMINI_SYSTEM_PROMPT
+                    ),
+                )
+                draft = _extract_json_payload(response)
+                usage = getattr(response, "usage_metadata", None)
+                span.result(
+                    {"proposal": draft}
+                    if draft is not None
+                    else {"text": _extract_text(response)},
+                    input_tokens=getattr(usage, "prompt_token_count", None),
+                    output_tokens=getattr(usage, "candidates_token_count", None),
+                    cached_tokens=getattr(usage, "cached_content_token_count", None),
+                    model=self._model,
+                )
         except Exception as exc:  # network/timeout/SDK/auth/quota — classify, never leak details
             kind = classify_exception(exc)
             # Log the failure classification + exception TYPE only — never the message, which
@@ -94,15 +186,22 @@ class GeminiProvider(Diagnoser):
                 kind.value,
                 type(exc).__name__,
             )
+            with run.span("diagnosis-outcome", failure_kind=kind.value, escalated=True):
+                pass
             return safe_fallback_proposal(
                 case, reason=user_message(kind), failure_kind=kind.value
             )
 
-        draft = _extract_json_payload(response)
         if draft is None:
             logger.warning(
                 "AI returned no structured proposal for case %s; escalating", case.case_id
             )
+            with run.span(
+                "diagnosis-outcome",
+                failure_kind=AIFailureKind.BAD_RESPONSE.value,
+                escalated=True,
+            ):
+                pass
             return safe_fallback_proposal(
                 case,
                 reason=user_message(AIFailureKind.BAD_RESPONSE),
@@ -117,12 +216,25 @@ class GeminiProvider(Diagnoser):
                 case.case_id,
                 type(exc).__name__,
             )
+            with run.span(
+                "diagnosis-outcome",
+                failure_kind=AIFailureKind.MALFORMED.value,
+                escalated=True,
+            ):
+                pass
             return safe_fallback_proposal(
                 case,
                 reason=user_message(AIFailureKind.MALFORMED),
                 failure_kind=AIFailureKind.MALFORMED.value,
             )
 
+        with run.span(
+            "diagnosis-outcome",
+            action_type=proposal.action_type.value,
+            confidence=proposal.confidence,
+            escalated=False,
+        ):
+            pass
         logger.info(
             "AI diagnosis complete: case=%s provider=%s action=%s confidence=%s",
             case.case_id,
