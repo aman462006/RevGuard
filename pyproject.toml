@@ -49,6 +49,12 @@ razorpay = [
     "razorpay>=1.4,<2",
     "setuptools>=68,<81",
 ]
+# Optional: enables Agent Flight Recorder observability (afrec, from Aman's agent-flight-recorder
+# repo). Imported lazily by the diagnosis providers; without it, GeminiProvider runs with a no-op
+# recorder and behavior is identical. AFREC_API_URL streams runs live to the afrec dashboard.
+afrec = [
+    "afrec @ git+https://github.com/aman462006/agent-flight-recorder.git@main",
+]
 # Optional: enables the FastAPI webhook endpoint. Imported lazily; the core engine and its
 # tests never require it.
 api = [
@@ -62,6 +68,11 @@ revguard = "revguard.__main__:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/revguard"]
+
+[tool.hatch.metadata]
+# Required for the `afrec` optional extra, which uses a git+https direct
+# reference (afrec is not on PyPI; it lives in the agent-flight-recorder repo).
+allow-direct-references = true
 
 [tool.pytest.ini_options]
 # Lets the test suite import the package from src/ without an editable install,
