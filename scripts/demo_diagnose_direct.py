@@ -53,7 +53,8 @@ def main() -> None:
     print("\nDIAGNOSIS PROPOSAL:")
     print(json.dumps(proposal.model_dump() if hasattr(proposal, "model_dump") else vars(proposal),
                      indent=1, default=str)[:1000])
-    print("\nRecorded to the AFREC dashboard with real token counts.")
+    print("\nThis run is now recorded via afrec (flight recorder).")
+print("Check the dashboard in a minute; the run lands with real token counts.")
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ from afrec import Recorder
 from afrec.recorder import SqliteStore
 
 from revguard.diagnosis.gemini_provider import GeminiProvider, _NullRecorder
+from revguard.diagnosis.groq_provider import GroqProvider
 from revguard.domain import ActionType
 
 
@@ -111,6 +112,93 @@ def test_provider_failure_records_escalated_outcome(make_case):
     assert any(e["data"].get("escalated") is True for e in outcome)
     # The exception itself is on the trace — the LLM span records the error.
     assert any(e["kind"] == "error" for e in events)
+
+
+
+
+class FakeGroqClient:
+    """OpenAI-compatible chat.completions client, as the groq SDK exposes it."""
+
+    def __init__(self, response=None, error=None, usage=None):
+        self._error = error
+        self.usage = usage or SimpleNamespace(
+            prompt_tokens=1200, completion_tokens=35, prompt_tokens_details=None
+        )
+        self.chat = SimpleNamespace(completions=self)
+
+    def create(self, **kwargs):
+        if self._error is not None:
+            raise self._error
+        resp = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=(
+                            '{"action_type": "retry_payment", '
+                            '"rationale": "mandate failed once; retry is likely", '
+                            '"confidence": 0.7}'
+                        )
+                    )
+                )
+            ],
+            usage=self.usage,
+        )
+        return resp
+
+
+def test_groq_success_path_records_llm_span_with_real_token_usage(make_case):
+    rec = make_recorder()
+    client = FakeGroqClient()
+    proposal = GroqProvider(
+        model="qwen/qwen3.8-27b", client=client, recorder=rec
+    ).diagnose(make_case())
+
+    assert proposal.action_type is ActionType.RETRY_PAYMENT
+
+    runs = rec.store.list_runs()
+    assert len(runs) == 1 and runs[0]["status"] == "completed"
+    assert runs[0]["tags"]["provider"] == "groq"
+    assert runs[0]["tags"]["model"] == "qwen/qwen3.8-27b"
+
+    events = rec.store.get_events(runs[0]["run_id"])
+    llm_resp = next(e for e in events if e["kind"] == "llm.response")
+    assert llm_resp["input_tokens"] == 1200
+    assert llm_resp["output_tokens"] == 35
+    assert llm_resp["model"] == "qwen/qwen3.8-27b"
+
+    outcome = next(
+        e
+        for e in events
+        if e["kind"] == "span.start" and e["data"].get("label") == "diagnosis-outcome"
+    )
+    assert outcome["data"]["action_type"] == "retry_payment"
+    assert outcome["data"]["escalated"] is False
+
+
+def test_groq_provider_failure_records_escalated_outcome(make_case):
+    rec = make_recorder()
+    client = FakeGroqClient(error=TimeoutError("simulated provider timeout"))
+    proposal = GroqProvider(
+        model="qwen/qwen3.8-27b", client=client, recorder=rec
+    ).diagnose(make_case())
+
+    assert proposal.action_type is ActionType.RECOMMEND_ESCALATION
+
+    events = rec.store.get_events(rec.store.list_runs()[0]["run_id"])
+    outcome = [
+        e
+        for e in events
+        if e["kind"] == "span.start" and e["data"].get("label") == "diagnosis-outcome"
+    ]
+    assert any(e["data"].get("escalated") is True for e in outcome)
+    assert any(e["kind"] == "error" for e in events)
+
+
+def test_groq_null_recorder_keeps_diagnosis_working(make_case):
+    client = FakeGroqClient()
+    provider = GroqProvider(model="m", client=client, recorder=_NullRecorder())
+    proposal = provider.diagnose(make_case())
+    assert proposal.action_type is ActionType.RETRY_PAYMENT
 
 
 def test_null_recorder_keeps_diagnosis_working(make_case):

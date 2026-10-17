@@ -1,4 +1,9 @@
-"""Groq provider (Llama 3.3) behind the :class:`Diagnoser` interface.
+"""Groq provider (Llama 3.3 / Qwen) behind the :class:`Diagnoser` interface.
+
+Every diagnosis is recorded through afrec (Agent Flight Recorder), exactly
+like the Gemini path: one flight per diagnosis, real token usage from the
+provider response, and a diagnosis-outcome span for every exit path. A
+missing afrec install degrades to a no-op recorder and changes nothing.
 
 Mirrors the fail-closed design of the other providers using the official ``groq`` SDK, which
 is OpenAI-compatible. The model is driven in native JSON mode
@@ -17,6 +22,7 @@ from pydantic import ValidationError
 
 from revguard.diagnosis.diagnoser import Diagnoser, safe_fallback_proposal
 from revguard.diagnosis.errors import AIFailureKind, classify_exception, user_message
+from revguard.diagnosis.gemini_provider import _NullRecorder
 from revguard.diagnosis.prompts import ALLOWED_ACTION_VALUES, build_user_prompt
 from revguard.domain import ActionProposal, RecoveryCase
 
@@ -56,6 +62,7 @@ class GroqProvider(Diagnoser):
         max_tokens: int = 1024,
         timeout_s: float = 30.0,
         client: Any | None = None,
+        recorder: Any | None = None,
     ) -> None:
         self._model = model
         self._api_key = api_key
@@ -63,6 +70,7 @@ class GroqProvider(Diagnoser):
         self._max_tokens = max_tokens
         self._timeout_s = timeout_s
         self._client = client
+        self._recorder = recorder
 
     def _get_client(self) -> Any:
         if self._client is None:
@@ -73,19 +81,53 @@ class GroqProvider(Diagnoser):
             self._client = Groq(api_key=self._api_key, timeout=self._timeout_s)
         return self._client
 
+    def _get_recorder(self) -> Any:
+        """Explicit recorder wins (tests); else afrec's process default; else no-op.
+
+        Never raises: observability is optional for this module by design.
+        """
+        if self._recorder is not None:
+            return self._recorder
+        try:
+            from afrec import get_recorder
+
+            return get_recorder()
+        except Exception:  # afrec not installed — run unrecorded
+            return _NullRecorder()
+
     def diagnose(self, case: RecoveryCase) -> ActionProposal:
+        # One recorded flight per diagnosis, mirroring the Gemini path.
+        rec = self._get_recorder()
+        with rec.run(
+            f"Diagnose recovery case {case.case_id}",
+            tags={"agent": "revguard", "provider": self.name, "model": self._model},
+        ) as run:
+            return self._diagnose(case, run)
+
+    def _diagnose(self, case: RecoveryCase, run: Any) -> ActionProposal:
         try:
             client = self._get_client()
-            response = client.chat.completions.create(
-                model=self._model,
-                messages=[
-                    {"role": "system", "content": GROQ_SYSTEM_PROMPT},
-                    {"role": "user", "content": build_user_prompt(case)},
-                ],
-                temperature=self._temperature,
-                max_tokens=self._max_tokens,
-                response_format={"type": "json_object"},
-            )
+            prompt = build_user_prompt(case)
+            messages = [
+                {"role": "system", "content": GROQ_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ]
+            with run.llm_call(self._model, messages=messages) as span:
+                response = client.chat.completions.create(
+                    model=self._model,
+                    messages=messages,
+                    temperature=self._temperature,
+                    max_tokens=self._max_tokens,
+                    response_format={"type": "json_object"},
+                )
+                draft = _extract_json_payload(response)
+                usage = getattr(response, "usage", None)
+                span.result(
+                    {"proposal": draft} if draft is not None else {"raw": str(response)[:2000]},
+                    input_tokens=getattr(usage, "prompt_tokens", None),
+                    output_tokens=getattr(usage, "completion_tokens", None),
+                    model=self._model,
+                )
         except Exception as exc:  # network/timeout/SDK/auth/quota — classify, never leak details
             kind = classify_exception(exc)
             # Log the failure classification + exception TYPE only — never the message, which
@@ -96,15 +138,22 @@ class GroqProvider(Diagnoser):
                 kind.value,
                 type(exc).__name__,
             )
+            with run.span("diagnosis-outcome", failure_kind=kind.value, escalated=True):
+                pass
             return safe_fallback_proposal(
                 case, reason=user_message(kind), failure_kind=kind.value
             )
 
-        draft = _extract_json_payload(response)
         if draft is None:
             logger.warning(
                 "AI returned no structured proposal for case %s; escalating", case.case_id
             )
+            with run.span(
+                "diagnosis-outcome",
+                failure_kind=AIFailureKind.BAD_RESPONSE.value,
+                escalated=True,
+            ):
+                pass
             return safe_fallback_proposal(
                 case,
                 reason=user_message(AIFailureKind.BAD_RESPONSE),
@@ -119,12 +168,25 @@ class GroqProvider(Diagnoser):
                 case.case_id,
                 type(exc).__name__,
             )
+            with run.span(
+                "diagnosis-outcome",
+                failure_kind=AIFailureKind.MALFORMED.value,
+                escalated=True,
+            ):
+                pass
             return safe_fallback_proposal(
                 case,
                 reason=user_message(AIFailureKind.MALFORMED),
                 failure_kind=AIFailureKind.MALFORMED.value,
             )
 
+        with run.span(
+            "diagnosis-outcome",
+            action_type=proposal.action_type.value,
+            confidence=proposal.confidence,
+            escalated=False,
+        ):
+            pass
         logger.info(
             "AI diagnosis complete: case=%s provider=%s action=%s confidence=%s",
             case.case_id,
