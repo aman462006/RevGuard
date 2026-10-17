@@ -29,7 +29,7 @@ import urllib.request
 
 
 def _post(url: str, payload: dict | None = None) -> dict:
-    data = json.dumps(payload or {}).encode()
+    data = json.dumps(payload or {}, default=str).encode()  # events carry datetimes
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
     try:
         return json.load(urllib.request.urlopen(req, timeout=90))
