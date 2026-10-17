@@ -6,6 +6,7 @@
 
 $env:AFREC_API_URL = "https://afrec-api.onrender.com"
 $env:PYTHONPATH = "src"
+$env:REVGUARD_AI_MODEL = "qwen/qwen3.8-27b"
 
 if (-not $env:GROQ_API_KEY) {
     $env:GROQ_API_KEY = Read-Host "Paste your Groq API key (gsk_...)"

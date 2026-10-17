@@ -1,4 +1,4 @@
-"""Run ONE real Groq diagnosis directly, recorded to the AFREC dashboard.
+r"""Run ONE real Groq diagnosis directly, recorded to the AFREC dashboard.
 
 The API's POST /cases/{id}/run runs the FULL pipeline and requires the
 Razorpay recovery integration in production mode. This script runs only the
@@ -7,7 +7,7 @@ local database, with afrec recording enabled. No Razorpay keys needed.
 
 Run from the repo root:
 
-    powershell -ExecutionPolicy Bypass -File scripts\demo_diagnose_direct.ps1
+    powershell -ExecutionPolicy Bypass -File scripts/demo_diagnose_direct.ps1
 """
 
 from __future__ import annotations
